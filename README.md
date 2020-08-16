@@ -1,0 +1,2 @@
+# CSPlugins
+Cobaltstrike Plugins
