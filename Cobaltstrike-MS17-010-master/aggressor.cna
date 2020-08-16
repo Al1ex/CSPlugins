@@ -1,0 +1,3 @@
+include(script_resource("modules/elevate.cna"));
+include(script_resource("modules/getinfo.cna"));
+include(script_resource("modules/pwndog.cna"));
