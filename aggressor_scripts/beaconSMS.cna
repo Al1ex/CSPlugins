@@ -1,0 +1,82 @@
+global('@old $phonenumber');
+
+# This script requires ssmtp. Use apt-get install ssmtp
+# Setup ssmtp example http://tombuntu.com/index.php/2008/10/21/sending-email-from-your-system-with-ssmtp/
+# Example ssmtp.conf for gmail
+# Note: ***** You must allow access for "less secure apps" https://support.google.com/accounts/answer/6010255
+# For information on how to email an SMS to through your cellular provider http://www.emailtextmessages.com/
+
+
+on heartbeat_10s {
+   local('@beacons $beacon $bid %data @new @all');
+
+   # grab all beacon ids AND build a map between ids and data
+   @beacons = beacons();
+   foreach $beacon (@beacons) {
+      $bid = $beacon['id'];
+      %data[$bid] = $beacon;
+      push(@all, $bid);
+   }
+
+   # remove old beacons from current list... I use copy(@all)
+   # because removeAll is destructive to its first argument
+   @new = removeAll(copy(@all), @old);
+
+   # with old beacons removed; we have our new beacons...
+   foreach $bid (@new) {
+      fire_event("beacon_initial", $bid, %data[$bid]);
+   }
+
+   # make our list of all beacons into our old list now
+   @old = @all;
+}
+
+#################
+#               #
+# Menu Settings #
+#               #
+#################
+
+menubar("SMS", "smsmenu", 2);
+
+popup smsmenu {
+   item "Setup SMS Notification" {
+      beaconSMS_dialog();
+   }
+}
+
+
+#################
+#               #
+# Act on beacon #
+#               #
+#################
+on beacon_initial {
+   global('$phonenumber');
+   local('$process @data');
+   println("I have a beacon: $1 from " . $2['internal']);
+   $process = exec("sh sendsms.sh");
+   @data = readAll($process);
+   closef($process);
+   bsleep($1, 5, 10);
+}
+
+sub beaconSMS_dialog {
+   global('$phonenumber');
+   local('$mailto $mailfrom $subject $data $file $handle $handle2 $smsscript');
+   exec("rm beaconalert.txt");
+   exec("rm sendsms.sh");
+   $phonenumber = prompt_text("SMS_Number:");
+   $mailto = prompt_text("Mailto:");
+   $mailfrom = prompt_text("Mailfrom:");
+   $subject = prompt_text("Subject:");
+   $data = "Alert: We have received a new Beacon!";
+   $file = ("To: $mailto $+ \nFrom: $mailfrom $+ \nSubject: $subject $+ \n\n$data");
+   $handle = openf(">beaconalert.txt");
+   writeb($handle, $file);
+   closef($handle);
+   $smsscript = ("\#/bin/bash $+ \ncat beaconalert.txt | ssmtp $phonenumber");
+   $handle2 = openf(">sendsms.sh");
+   writeb($handle2, $smsscript);
+   closef($handle2);
+}

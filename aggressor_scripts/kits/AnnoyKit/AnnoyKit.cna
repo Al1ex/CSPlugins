@@ -1,0 +1,50 @@
+# Actions in this kit center around miscellaneous fun thta generally involve messing with the user
+# @Und3rf10w
+
+popup beacon_bottom {
+	menu "AnnoyKit" {
+		item "Open Hidden Internet Explorer" {
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "powershell-import Open-HiddenInternetExplorer.ps1");
+				bpowershell_import($1, script_resource("AnnoyKit/scripts/Open-HiddenInternetExplorer.ps1"));
+				prompt_text("URL to open?", "https://www.youtube.com/watch?v=wZZ7oFKsKzY", {
+					$videoURL = $1;
+					return $videoURL;
+				});
+				binput($1, "powershell Open-HiddenInternetExplorer $videoURL ");
+				bpowershell($1, "Open-HiddenInternetExplorer $videoURL ");
+			}
+		}
+		# Credit goes to SadProcessor for these scripts!
+		menu "Play chiptunes" {
+			item "Play Imperial March" {
+				local('$bid');
+				foreach $bid ($1){
+					binput($1, "powershell-import Play-ImperialMarch.ps1");
+					bpowershell_import($1, script_resource("AnnoyKit/scripts/annoySongs/Play-ImperialMarch.ps1"));
+					binput($1, "powershell Play-ImperialMarch");
+					bpowershell($1, "Play-ImperialMarch");
+				}
+			}
+			item "Play Rickroll" {
+				local('$bid');
+				foreach $bid ($1){
+					binput($1, "powershell-import Play-RickAstley.ps1");
+					bpowershell_import($1, script_resource("AnnoyKit/scripts/annoySongs/Play-RickAstley.ps1"));
+					binput($1, "powershell Play-RickAstely");
+					bpowershell($1, "Play-RickAstely");
+				}
+			}
+			item "Play Tetris Theme" {
+				local('$bid');
+				foreach $bid ($1){
+					binput($1, "powershell-import Play-TetrisTune.ps1");
+					bpowershell_import($1, script_resource("AnnoyKit/scripts/annoySongs/Play-TetrisTune.ps1"));
+					binput($1, "powershell Play-TetrisTune");
+					bpowershell($1, "Play-TetrisTune");
+				}
+			}
+		}
+	}
+}

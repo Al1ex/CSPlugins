@@ -1,0 +1,51 @@
+#### Aggressor script to simplify exporting command output 
+###  Author: Alyssa (ramen0x3f)
+
+### Usage ###
+# 1. Import into Cobalt Strike
+# 2. From beacon run
+# 	> start_log
+# 	> [commands]
+# 	> stop_log
+
+### Output ###
+#	cobaltstrike/saved_logs/[beacon id]_yyyyMMdd_HHmmssSSS.log
+
+global('%logging');
+
+alias start_log {
+	
+	if ( %logging[$1] ) { #check if already logging
+		berror($1, "Logging already started on this beacon.");
+		return;
+	}
+
+	
+	if (!-exists "./saved_logs/" ) { #check if saved_logs exists
+		mkdir("./saved_logs"); #create otherwise
+	}
+	
+	$filepath = "./saved_logs/" . $1 . "_" . formatDate("yyyyMMdd_HHmmssSSS") . ".log";
+	if (!-exists $filepath) { #create and save handle to log
+		createNewFile($filepath);
+		blog($1, "Saving output to " . $filepath . "\n");
+		%logging[$1] = openf(">" . $filepath);
+	}
+}
+
+alias stop_log {
+	if ( !%logging[$1] ) { #check if actually logging
+		berror($1, "Logging not started on this beacon.");
+		return;
+	}
+
+	closef(%logging[$1]); #close handle and delete key
+	removeAt(%logging, $1);	
+	blog($1, "Output saved.");
+}
+
+on beacon_output {
+	if ( %logging[$1] ) { 
+		writeb(%logging[$1], $2);
+	}
+}

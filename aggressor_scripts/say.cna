@@ -1,0 +1,5 @@
+on beacon_initial {
+    if (-isadmin $1) {
+        exec("say -v Fiona 'New admin beacon!'");
+    }
+}

